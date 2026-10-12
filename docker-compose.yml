@@ -1,0 +1,45 @@
+# CoffeeChill - Part 2
+# Starts the whole app with one command:   docker compose up -d
+# Both images are pulled straight from Docker Hub (version tag v2.0).
+
+services:
+
+  # Azure Storage emulator: Tables (menu + orders), Blobs (staff documents) and Queues (orders).
+  azurite:
+    image: st10476800/coffeenchill-azurite:v2.0
+    container_name: azurite
+    command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck"]
+    ports:
+      - "10000:10000"   # Blob
+      - "10001:10001"   # Queue
+      - "10002:10002"   # Table
+    volumes:
+      - azurite-data:/data   # keeps menu items, documents and orders when the container restarts
+    networks:
+      - coffeenchill-net
+    restart: unless-stopped
+
+  # Azure Functions host: the HTTP endpoints plus the ProcessOrderQueue queue trigger.
+  functions:
+    image: st10476800/coffeenchill-functions:v2.0
+    container_name: coffeenchill-functions
+    ports:
+      - "7071:80"
+    environment:
+      # "azurite" here is the service name above. Containers on the same network find each other by name.
+      AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+      # Seconds the "barista" takes per step (Received -> Preparing -> Ready).
+      ORDER_STEP_DELAY_SECONDS: "10"
+    depends_on:
+      - azurite
+    networks:
+      - coffeenchill-net
+    restart: unless-stopped
+
+networks:
+  coffeenchill-net:
+    name: coffeenchill-net
+    driver: bridge
+
+volumes:
+  azurite-data:
