@@ -1,0 +1,1175 @@
+{
+  "info": {
+    "_postman_id": "cdba857e-201d-4221-b354-a7cf539066f2",
+    "name": "CoffeeChill API - Part 2",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "58205099"
+  },
+  "item": [
+    {
+      "name": "1. Menu",
+      "item": [
+        {
+          "name": "Create Menu Item",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A new Id every run, so Create never clashes with an item that already exists (409).",
+                  "pm.collectionVariables.set(\"menuItemId\", \"COF-\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "let item = null;",
+                  "try { item = pm.response.json(); } catch (e) { item = null; }",
+                  "pm.test(\"Returned item has the new Id and category\", function () {",
+                  "    pm.expect(item.Id).to.eql(pm.collectionVariables.get(\"menuItemId\"));",
+                  "    pm.expect(item.Category).to.eql(pm.collectionVariables.get(\"menuCategory\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Category\": \"{{menuCategory}}\",\n  \"Id\": \"{{menuItemId}}\",\n  \"Name\": \"Cappuccino\",\n  \"Description\": \"Espresso with steamed milk\",\n  \"Price\": 35.0,\n  \"IsAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu"
+              ]
+            },
+            "description": "Creates a menu item in the MenuItems table. PartitionKey = Category, RowKey = Id."
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Menu Items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let items = null;",
+                  "try { items = pm.response.json(); } catch (e) { items = null; }",
+                  "pm.test(\"Response is a list\", function () {",
+                  "    pm.expect(items).to.be.an(\"array\");",
+                  "});",
+                  "pm.test(\"The new menu item is in the list\", function () {",
+                  "    const id = pm.collectionVariables.get(\"menuItemId\");",
+                  "    let found = false;",
+                  "    for (let i = 0; i < items.length; i++) {",
+                  "        if (items[i].Id === id) { found = true; }",
+                  "    }",
+                  "    pm.expect(found).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/menu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Menu Items By Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let items = null;",
+                  "try { items = pm.response.json(); } catch (e) { items = null; }",
+                  "pm.test(\"Every item is in the requested category\", function () {",
+                  "    const category = pm.collectionVariables.get(\"menuCategory\");",
+                  "    pm.expect(items.length).to.be.above(0);",
+                  "    for (let i = 0; i < items.length; i++) {",
+                  "        pm.expect(items[i].Category).to.eql(category);",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/menu/category/{{menuCategory}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu",
+                "category",
+                "{{menuCategory}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Menu Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let item = null;",
+                  "try { item = pm.response.json(); } catch (e) { item = null; }",
+                  "pm.test(\"Price and description were updated\", function () {",
+                  "    pm.expect(item.Price).to.eql(38);",
+                  "    pm.expect(item.Description).to.include(\"extra foam\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Cappuccino\",\n  \"Description\": \"Espresso with steamed milk and extra foam\",\n  \"Price\": 38.0,\n  \"IsAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/{{menuCategory}}/{{menuItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu",
+                "{{menuCategory}}",
+                "{{menuItemId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Menu Item - missing name (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Category\": \"{{menuCategory}}\",\n  \"Id\": \"BAD-001\",\n  \"Price\": 10.0,\n  \"IsAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu"
+              ]
+            },
+            "description": "Validation check: Name is required."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Menu Item - not found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Name\": \"Ghost\",\n  \"Description\": \"Not a real item\",\n  \"Price\": 1.0,\n  \"IsAvailable\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/menu/{{menuCategory}}/DOES-NOT-EXIST",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu",
+                "{{menuCategory}}",
+                "DOES-NOT-EXIST"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Menu Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 204 No Content\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/menu/{{menuCategory}}/{{menuItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu",
+                "{{menuCategory}}",
+                "{{menuItemId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Menu Item - already deleted (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/menu/{{menuCategory}}/{{menuItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "menu",
+                "{{menuCategory}}",
+                "{{menuItemId}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Staff Documents",
+      "item": [
+        {
+          "name": "Upload Staff Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {\n    pm.response.to.have.status(201);\n});\nconst text = pm.response.text();\npm.test(\"Response confirms the upload\", function () {\n    pm.expect(text).to.include(\"Uploaded: \");\n});\n// Save the file name so List and Download can use it.\npm.collectionVariables.set(\"documentFileName\", text.replace(\"Uploaded: \", \"\").trim());"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "description": "Pick any file from your computer (PDF, Word doc or image).",
+                  "src": [
+                    "",
+                    "/C:/Users/emeris/Pictures/ERD EX 2.png"
+                  ]
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/documents/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "upload"
+              ]
+            },
+            "description": "Before running: click the 'file' row in the Body tab and select a file from your computer."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Staff Document - no file (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "note",
+                  "value": "This request has no file in it",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/documents/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "upload"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Staff Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let files = null;",
+                  "try { files = pm.response.json(); } catch (e) { files = null; }",
+                  "pm.test(\"Uploaded file is in the list with its size\", function () {",
+                  "    const name = pm.collectionVariables.get(\"documentFileName\");",
+                  "    let match = null;",
+                  "    for (let i = 0; i < files.length; i++) {",
+                  "        if (files[i].FileName === name) { match = files[i]; }",
+                  "    }",
+                  "    pm.expect(match).to.not.be.null;",
+                  "    pm.expect(match.Size).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download Staff Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response is sent as a file download\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Disposition\")).to.include(\"attachment\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/download/{{documentFileName}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "download",
+                "{{documentFileName}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Download Staff Document - not found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/documents/download/does-not-exist.txt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "documents",
+                "download",
+                "does-not-exist.txt"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Orders (Queue)",
+      "item": [
+        {
+          "name": "Queue Order",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A new OrderId every run, in the same format as the brief (ORD-2026-8801).",
+                  "const now = new Date();",
+                  "pm.collectionVariables.set(\"orderId\", \"ORD-\" + now.getFullYear() + \"-\" + String(Date.now()).slice(-6));",
+                  "pm.collectionVariables.set(\"orderTimestamp\", now.toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 202 Accepted\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "let result = null;",
+                  "try { result = pm.response.json(); } catch (e) { result = null; }",
+                  "pm.test(\"Order was placed on order-processing-queue\", function () {",
+                  "    pm.expect(result.OrderId).to.eql(pm.collectionVariables.get(\"orderId\"));",
+                  "    pm.expect(result.QueueName).to.eql(\"order-processing-queue\");",
+                  "    pm.expect(result.Status).to.eql(\"Queued\");",
+                  "});",
+                  "pm.test(\"Queue message is Base64 encoded JSON of the order\", function () {",
+                  "    const decoded = JSON.parse(atob(result.Base64Message));",
+                  "    pm.expect(decoded.OrderId).to.eql(result.OrderId);",
+                  "    pm.expect(decoded.TotalPrice).to.eql(65);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"OrderId\": \"{{orderId}}\",\n  \"CustomerName\": \"Jane Smith\",\n  \"SelectedItemSKUs\": [\n    \"COF-001\",\n    \"PAS-104\"\n  ],\n  \"TotalPrice\": 65.0,\n  \"OrderTimestamp\": \"{{orderTimestamp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "queue"
+              ]
+            },
+            "description": "Queue producer. Returns 202 straight away; ProcessOrderQueue handles the order in the background."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order - processing has started",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Give the queue function time to work before this request runs.",
+                  "setTimeout(function () {}, 5000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let order = null;",
+                  "try { order = pm.response.json(); } catch (e) { order = null; }",
+                  "pm.test(\"Queue function saved the order to the Orders table\", function () {",
+                  "    pm.expect(order.OrderId).to.eql(pm.collectionVariables.get(\"orderId\"));",
+                  "    pm.expect([\"Received\", \"Preparing\", \"Ready\"]).to.include(order.Status);",
+                  "});",
+                  "pm.test(\"PartitionKey (OrderDate) is the order date\", function () {",
+                  "    const expected = pm.collectionVariables.get(\"orderTimestamp\").substring(0, 10);",
+                  "    pm.expect(order.OrderDate).to.eql(expected);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Collect Order - too early (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Explains the order is not Ready yet\", function () {",
+                  "    pm.expect(pm.response.json().Message).to.include(\"only be collected once it is Ready\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/collect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "collect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order - wait until Ready",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Give the queue function time to work before this request runs.",
+                  "setTimeout(function () {}, 25000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Status moved Received -> Preparing -> Ready\", function () {",
+                  "    pm.expect(pm.response.json().Status).to.eql(\"Ready\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "Waits 25 seconds first (the queue function takes about 10 seconds per step)."
+          },
+          "response": []
+        },
+        {
+          "name": "Collect Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Status is now Collected\", function () {",
+                  "    pm.expect(pm.response.json().Status).to.eql(\"Collected\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/collect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "collect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Collect Order - already collected (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/collect",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}",
+                "collect"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "let orders = null;",
+                  "try { orders = pm.response.json(); } catch (e) { orders = null; }",
+                  "pm.test(\"Our order is in the list as Collected\", function () {",
+                  "    const id = pm.collectionVariables.get(\"orderId\");",
+                  "    let match = null;",
+                  "    for (let i = 0; i < orders.length; i++) {",
+                  "        if (orders[i].OrderId === id) { match = orders[i]; }",
+                  "    }",
+                  "    pm.expect(match).to.not.be.null;",
+                  "    pm.expect(match.Status).to.eql(\"Collected\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Order - duplicate OrderId (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"OrderId\": \"{{orderId}}\",\n  \"CustomerName\": \"Jane Smith\",\n  \"SelectedItemSKUs\": [\n    \"COF-001\"\n  ],\n  \"TotalPrice\": 35.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "queue"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Order - validation errors (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Lists every problem with the order\", function () {",
+                  "    const errors = pm.response.json().Errors;",
+                  "    pm.expect(errors.length).to.be.at.least(3);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CustomerName\": \"\",\n  \"SelectedItemSKUs\": [],\n  \"TotalPrice\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "queue"
+              ]
+            },
+            "description": "Missing customer name, no items and a negative price."
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Order - invalid JSON (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 400 Bad Request\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"CustomerName\": \"Jane Smith\", this is not valid json ",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "queue"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Queue Order - OrderId and timestamp generated (202)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 202 Accepted\", function () {",
+                  "    pm.response.to.have.status(202);",
+                  "});",
+                  "let result = null;",
+                  "try { result = pm.response.json(); } catch (e) { result = null; }",
+                  "pm.test(\"Server generated an OrderId and a timestamp\", function () {",
+                  "    pm.expect(result.OrderId).to.match(/^ORD-\\d{4}-\\d{6}$/);",
+                  "    pm.expect(result.Order.OrderTimestamp).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"CustomerName\": \"Sipho Dlamini\",\n  \"SelectedItemSKUs\": [\n    \"COF-002\"\n  ],\n  \"TotalPrice\": 30.0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/orders/queue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "queue"
+              ]
+            },
+            "description": "No OrderId or OrderTimestamp sent. The producer fills them in."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Order - not found (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/orders/ORD-0000-000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "ORD-0000-000000"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Failed Orders (poison queue)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response is a list\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/failed-orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "failed-orders"
+              ]
+            },
+            "description": "Messages that failed every retry and were moved to order-processing-queue-poison."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test(\"Response time is under 5 seconds\", function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:7071/api"
+    },
+    {
+      "key": "menuCategory",
+      "value": "Hot Drinks"
+    },
+    {
+      "key": "menuItemId",
+      "value": ""
+    },
+    {
+      "key": "documentFileName",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "orderTimestamp",
+      "value": ""
+    }
+  ]
+}
