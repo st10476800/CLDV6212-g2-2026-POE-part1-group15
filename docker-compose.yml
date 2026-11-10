@@ -1,35 +1,56 @@
-# CoffeeChill - Part 2
+# CoffeeNChill - Part 3
 # Starts the whole app with one command:   docker compose up -d
-# Both images are pulled straight from Docker Hub (version tag v2.0).
+# All three images come from Docker Hub.
+#
+# Then open:  http://YOUR-SERVER-IP:5000/swagger
+#
+# Optional: make a file called .env next to this file with your own secrets:
+#   JWT_KEY=some-long-random-text-at-least-32-characters
+#   STAFF_CODE=your-own-staff-code
+# If there is no .env file, the default values below are used (fine for local testing only).
 
 services:
 
-  # Azure Storage emulator: Tables (menu + orders), Blobs (staff documents) and Queues (orders).
+  # Azure Storage emulator: Tables, Blobs and Queues.
+  # The ports are bound to 127.0.0.1, so they cannot be reached from the internet.
   azurite:
     image: st10476800/coffeenchill-azurite:v2.0
     container_name: azurite
     command: ["azurite", "-l", "/data", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck"]
     ports:
-      - "10000:10000"   # Blob
-      - "10001:10001"   # Queue
-      - "10002:10002"   # Table
+      - "127.0.0.1:10000:10000"
+      - "127.0.0.1:10001:10001"
+      - "127.0.0.1:10002:10002"
     volumes:
-      - azurite-data:/data   # keeps menu items, documents and orders when the container restarts
+      - azurite-data:/data
     networks:
       - coffeenchill-net
     restart: unless-stopped
 
-  # Azure Functions host: the HTTP endpoints plus the ProcessOrderQueue queue trigger.
+  # Azure Functions host: only runs the ProcessOrderQueue queue trigger in the background.
+  # It has no ports published, so nobody outside can call it. Only the gateway is public.
   functions:
     image: st10476800/coffeenchill-functions:v2.0
     container_name: coffeenchill-functions
-    ports:
-      - "7071:80"
     environment:
-      # "azurite" here is the service name above. Containers on the same network find each other by name.
       AzureWebJobsStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
-      # Seconds the "barista" takes per step (Received -> Preparing -> Ready).
       ORDER_STEP_DELAY_SECONDS: "10"
+    depends_on:
+      - azurite
+    networks:
+      - coffeenchill-net
+    restart: unless-stopped
+
+  # The new Part 3 gateway: Swagger, JWT login and role checks.
+  gateway:
+    image: st10476800/coffeenchill-gateway:v3.0
+    container_name: coffeenchill-gateway
+    ports:
+      - "5000:8080"
+    environment:
+      ConnectionStrings__AzureStorage: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+      Jwt__Key: "${JWT_KEY:-ThisIsOnlyADevelopmentKey-ChangeItOnTheVps-1234567890}"
+      Auth__StaffRegistrationCode: "${STAFF_CODE:-CoffeeStaff2026}"
     depends_on:
       - azurite
     networks:
