@@ -2,159 +2,76 @@
 
 ST10476800 and ST10476901
 
-This is our Azure Functions app for CoffeeNChill. In Part 1 we built the menu endpoints using Azure Table Storage and the staff document endpoints using Blob Storage. In Part 2 we added orders. When a student places an order, it now goes onto an Azure Storage Queue instead of being handled straight away, and a queue-triggered function picks it up in the background. We did this because at break time a lot of students order at once, and handling every order inside the request would slow the system down or crash it.
+This is our CoffeeNChill project. In Part 1 we made the menu and staff document endpoints, and in Part 2 we added orders that go through a Storage Queue. For Part 3 we built an ASP.NET Core Web API in front of all of it. It has Swagger, DTOs and JWT login, and the roles decide who is allowed to do what. Anyone can look at the menu and place an order, but only staff can change the menu, handle documents and update order statuses.
 
-Everything runs in Docker. Azurite stands in for Azure Storage, so you don't need an Azure account to run it.
+The app is running live on a DigitalOcean server. The Swagger page is at http://209.38.245.127:5000/swagger and our demo video is at https://youtu.be/VqfbEUlmbDo
 
-## What you need
+## Running it
 
-Docker Desktop, Postman and Git. You only need .NET and Visual Studio if you want to change the code.
-
-## How to run it
-
-Clone the repo and start everything from the root folder:
+You need Docker Desktop. Clone the repo and run this from the main folder:
 
 ```
-git clone <repo-url>
-cd <repo-folder>
 docker compose up -d
 ```
 
-This pulls both of our images from Docker Hub (tag v2.0), creates a bridge network called `coffeenchill-net` and a volume for Azurite's data, and starts both containers. Check that they're running:
+It pulls our three images from Docker Hub and starts them: azurite (our storage emulator), coffeenchill-functions (the queue processing from Part 2) and coffeenchill-gateway (the new API). Once they are all running, go to http://localhost:5000/swagger. Run `docker compose down` to stop everything. The data is kept in a volume, so it is still there next time.
 
-```
-docker compose ps
-```
+The compose file has a default JWT key and staff code so it works straight away. On the server we put our own values in a `.env` file instead.
 
-You should see `azurite` and `coffeenchill-functions` both showing "Up". The API runs at `http://localhost:7071/api`. On a fresh start, opening `http://localhost:7071/api/menu` in a browser should give you `[]`.
+## The containers
 
-To watch the queue function's logs, run `docker compose logs -f functions`. To stop everything, run `docker compose down`. Your data stays in the volume. If you want to wipe it too, use `docker compose down -v`.
+The gateway listens on port 8080 inside its container and Docker maps that to port 5000. It talks to Azurite directly for the menu, documents, orders and users, so it never calls the Functions app. The Functions container only runs the queue processing from Part 2 in the background. We did not give it a port, because its old HTTP endpoints have no login and anyone who could reach them would skip the JWT checks. On the server we also made the Azurite ports only listen on 127.0.0.1, because the Azurite account key is public and anyone could use it to read our data.
 
-## The docker-compose file
+## Login and roles
 
-`docker-compose.yml` is in the root of the repo and has two services.
+Users are saved in an Azure Table called Users. The PartitionKey is the role (Admin, Staff or Customer), the RowKey is the email, and the other columns are PasswordHash, FullName and CreatedDate. Passwords are hashed with BCrypt, so we never store the real password.
 
-`azurite` uses our image `st10476800/coffeenchill-azurite:v2.0` and emulates Tables, Blobs and Queues. We start it with `--skipApiVersionCheck`, because without it Azurite rejects requests from the newer Azure Storage SDK in our project. We found this out in Part 1 when the document endpoints kept failing with a 400.
+Anyone can register as a Customer at POST /api/auth/register. To register as Staff or Admin you also have to send a secret StaffCode, and a wrong code gives a 403. We added this because the role is part of the register request, so otherwise anyone could just type "Admin" and make themselves an admin. The staff code on our server is GRPFIFTEEN.
 
-`functions` uses `st10476800/coffeenchill-functions:v2.0`. Its storage connection string is passed in as an environment variable and points at Azurite by its service name (`azurite`), which works because both containers are on the same network.
+POST /api/auth/login checks the email and password and gives back a JWT that lasts 60 minutes. The token holds the user's name, email and role. A wrong email and a wrong password give the same 401 message, so nobody can use the login to find out which emails are registered. In Swagger you copy the token, click Authorize and paste it in, and Swagger adds the word Bearer for you.
 
-## Endpoints
+## What each role can do
 
-All routes start with `/api`.
+GET /api/menu, POST /api/orders/queue and GET /api/orders/{orderId} are open to everyone, and so are register and login. Adding, updating and deleting menu items needs the Admin or Staff role. The same goes for everything under /api/documents (upload, list, download and delete), for GET /api/orders, for PUT /api/orders/status and for GET /api/failed-orders. If you send no token to one of these you get a 401, and if you send a token with the wrong role, like a Customer trying to add a menu item, you get a 403.
 
-Menu (Table Storage):
+The brief asked for PUT /api/orders/status, so it takes the place of the collect endpoint from Part 2. A status can only move forward from Received to Preparing to Ready to Collected, and an order can only be Collected once it is Ready. Anything else gives a 409.
 
-- `POST /menu` creates an item and returns 201. You get 400 if Category or Name is missing or the price is negative, and 409 if an item with that Category and Id already exists.
-- `GET /menu` returns all items.
-- `GET /menu/category/{category}` returns the items in one category.
-- `PUT /menu/{category}/{id}` updates an item and returns 200, or 404 if it doesn't exist.
-- `DELETE /menu/{category}/{id}` deletes an item and returns 204, or 404 if it doesn't exist.
+The menu is saved in a table called MenuItems, and documents go into the staff-docs blob container with a 10 MB limit. Orders are checked and put on order-processing-queue, and the API answers 202 straight away. Then ProcessOrderQueue moves each order from Received to Preparing to Ready, the same as in Part 2. If a message fails 3 times it goes to the poison queue and ends up in the FailedOrders table.
 
-The menu endpoints use `MenuItemDto`, so you send `Category` and `Id` and the DTO maps them to `PartitionKey` and `RowKey` in the table. Example body for creating an item:
+## DTOs and Swagger
 
-```json
-{
-  "Category": "Hot Drinks",
-  "Id": "COF-001",
-  "Name": "Cappuccino",
-  "Description": "Espresso with steamed milk",
-  "Price": 35.00,
-  "IsAvailable": true
-}
-```
-
-Staff documents (Blob Storage, container `staff-docs`):
-
-- `POST /documents/upload` uploads a file sent as form-data with the key `file`. It returns 201, or 400 if there's no file.
-- `GET /documents` lists the files with their size and last modified date.
-- `GET /documents/download/{fileName}` downloads a file, or returns 404 if it isn't there.
-
-Orders (new in Part 2):
-
-- `POST /orders/queue` puts a new order on the queue and returns 202 Accepted.
-- `GET /orders` lists all orders.
-- `GET /orders/{orderId}` shows one order and its current status.
-- `PUT /orders/{orderId}/collect` marks an order as Collected. This only works once the order is Ready, otherwise you get 409.
-- `GET /failed-orders` lists the orders that ended up on the poison queue.
-
-Example body for placing an order:
-
-```json
-{
-  "OrderId": "ORD-2026-8801",
-  "CustomerName": "Jane Smith",
-  "SelectedItemSKUs": ["COF-001", "PAS-104"],
-  "TotalPrice": 65.00,
-  "OrderTimestamp": "2026-10-12T10:15:00Z"
-}
-```
-
-`OrderId` and `OrderTimestamp` are optional. If you leave them out, the API generates them. A bad order (no name, no items, a price of 0 or less, or broken JSON) gets a 400 with a list of everything that's wrong, and reusing an OrderId gets a 409.
-
-## How the order queue works
-
-When you post an order, `OrderFunctions` validates it, turns it into JSON, Base64 encodes it and sends it to `order-processing-queue`. The API answers with 202 straight away, so the student isn't left waiting while the order is being made.
-
-`ProcessOrderQueue` has `[QueueTrigger("order-processing-queue")]`, so it runs by itself when a message arrives, usually within 2 seconds. It decodes the message, reads the JSON into an `OrderMessage` and saves it to the `Orders` table with the status Received. The PartitionKey is the order date (`yyyy-MM-dd`) and the RowKey is the OrderId, as the brief asks. To simulate the barista, it waits 10 seconds and changes the status to Preparing, then waits another 10 seconds and changes it to Ready. The student then calls the collect endpoint, which sets it to Collected. The wait time can be changed with `ORDER_STEP_DELAY_SECONDS` in `docker-compose.yml`.
-
-If something goes wrong while processing a message (for example it isn't valid JSON), the function logs the error and throws it again so the host retries it. In `host.json` we set `maxDequeueCount` to 3, so after 3 failed tries the message is moved to `order-processing-queue-poison`. `ProcessPoisonOrder` picks it up from there, logs the full message and saves it to a `FailedOrders` table, which you can see with `GET /failed-orders`. We also made the function safe to retry. If an order is already in the table, it carries on from the order's current status instead of adding it a second time.
+Every endpoint uses a DTO, like MenuItemDto, OrderDto, RegisterDto and LoginResponseDto, so the table entities with their PartitionKey and RowKey never get sent out to the client. Swagger is set up with Swashbuckle and reads the XML comments above each controller method, so every endpoint has a description and a list of response codes. We also wrote a small filter so the padlock only shows on the endpoints that need a token.
 
 ## Testing
 
-Our Postman collection is in `docs/CoffeeChill-Part2.postman_collection.json`. It has 26 requests in three folders (Menu, Staff Documents and Orders) with 71 tests, and our last full run passed all 71. Every request uses `{{baseUrl}}`, and the menu and order IDs are generated fresh on each run, so the collection can be run as many times as you like.
+Our Postman collection is in the docs folder (CoffeeNChill-Part3.postman_collection.json). It has 35 requests that are sent as an anonymous user, a Customer, a Staff user and an Admin, and the tests check that each one gets the right status code. The login requests save the tokens, and the later requests use them as Bearer tokens. Our last run on the live server passed all 39 tests. A few of the Register requests show a red 409 in the screenshot, which only means those users were already registered from an earlier run.
 
-To run it, start the app, import the collection into Postman, and set the environment in the top right to "No environment" (the collection has its own variables). Then pick any file in the Upload Staff Document request, right-click the collection and choose Run collection. The run takes about 35 seconds because two of the order requests wait for the queue function to update the status.
+![Postman run for Part 3 with all 39 tests passing](docs/postman-results-part3.png)
 
-One thing that caught us out: the Postman runner can only read files from its working directory. If the upload test fails because the file is empty, go to Settings > General and turn on "Allow reading files outside working directory".
-
-To test the poison queue, you have to put a broken message on the queue yourself, because the API won't accept a bad order. We used Azure Storage Explorer for this. Connect to the local emulator, open Queues > order-processing-queue, add a message like `this is not valid json` and tick "Encode the message body in Base64". In the logs you'll see it fail 3 times and then show up as a POISON MESSAGE, and it will then appear in `GET /failed-orders`.
-
-## Project structure
-
-```
-/
-├── docker-compose.yml
-├── README.md
-├── docs/
-│   └── CoffeeChill-Part2.postman_collection.json
-└── CLDV6212-g2-2026-POE-part1-group15 (vs)/
-    ├── Dockerfile
-    ├── host.json
-    ├── Functions/   MenuFunctions, DocumentFunctions, OrderFunctions, ProcessOrderQueue
-    ├── Models/      menu, document and order models and DTOs
-    └── Services/    table, blob and queue services
-```
+To run it yourself, import the collection, set baseUrl to the server address and pick a small file in the upload request. Then run the whole collection in order, because the logins have to come first.
 
 ## Docker Hub
 
-- Functions: https://hub.docker.com/r/st10476800/coffeenchill-functions (v1.0 for Part 1, v2.0 for Part 2)
-- Azurite: https://hub.docker.com/r/st10476800/coffeenchill-azurite (v1.0, v2.0)
+Our images are on Docker Hub under st10476800: coffeenchill-gateway (v3.0), coffeenchill-functions (v1.0 and v2.0) and coffeenchill-azurite (v1.0 and v2.0). The links are https://hub.docker.com/r/st10476800/coffeenchill-gateway, https://hub.docker.com/r/st10476800/coffeenchill-functions and https://hub.docker.com/r/st10476800/coffeenchill-azurite
 
-If you change the code, rebuild and push the image from the folder with the Dockerfile:
+## The server
 
-```
-docker build -t st10476800/coffeenchill-functions:v2.0 .
-docker push st10476800/coffeenchill-functions:v2.0
-```
-
-Then run `docker compose pull` and `docker compose up -d` from the root folder.
+We put the app on a DigitalOcean server running Ubuntu 24.04. We installed Docker, copied over docker-compose.yml and a .env file, and ran docker compose up -d. Port 5000 is the only port open to the public.
 
 ## Problems we ran into
 
-Azurite doesn't support Azure File Shares, which is why our document upload didn't work in Part 1. We switched the documents over to Blob Storage, and all three document endpoints work now.
+Swagger crashed when we added the document upload, with an error about [FromForm] and IFormFile. Putting the file inside a small UploadDocumentDto class fixed it.
 
-We also had a build error on Windows saying a file couldn't be copied. The cause was the path being longer than 260 characters, because the project was inside OneDrive with long folder names. Cloning the repo to a short path like `C:\dev\cldv6212` fixed it.
+In Visual Studio we kept getting a locked file error when building, because the gateway was still running from the last test. We learned to stop it before every build.
 
-In Postman, a saved environment had its own `orderId` variable, and environment variables override collection variables. That made the tests keep reusing an old order, so we run the collection with "No environment" now.
+On one PC, Docker Compose wouldn't start because port 10001 was already used by an old Azurite container. Stopping the old one fixed it.
+
+Our Azure for Students credits ran out before we could deploy, so we used DigitalOcean instead. Compose works the same on any Linux server, so nothing in the project had to change.
 
 ## Who did what
 
-We split Part 2 into two halves. One of us did the side that receives orders and stores them, and the other did the queue side that processes them in the background.
+We split Part 3 in two. One of us did the setup, the login system and the Docker and server side, and the other did the menu, document and order endpoints.
 
-ST10476800 did the order endpoints and the Orders table. This was `OrderFunctions.cs` (queue an order, get all orders, get one order, collect an order and get the failed orders), `OrderEntity.cs` and `OrderDto.cs` for storing and returning orders, and `OrderTableService.cs`, which saves orders and updates their status in the Orders table. He also added the Blob Storage and Storage Queue packages to the `.csproj` file and set up `host.json` with 3 retries, the polling interval and Base64 message encoding.
+ST10476800 set up the gateway project and wrote Program.cs with the JWT and Swagger settings. He built the login side: the user entity and DTOs, PasswordService, TokenService, UserTableService and AuthController. He also wrote the Swagger padlock filter and the health check. On the Docker side he wrote the Dockerfile, the .dockerignore and docker-compose.yml, and pushed the gateway image to Docker Hub. He also set up the DigitalOcean server, wrote the Postman collection and put this README together.
 
-ST10476901 did the queue processing and the poison queue. This was `ProcessOrderQueue.cs`, which has the queue trigger that moves each order from Received to Preparing to Ready, and the poison queue handler that saves failed messages. He also wrote `QueueStorageService.cs`, which sends orders to `order-processing-queue` as Base64 JSON, and the models behind it: `OrderStatus.cs`, `OrderMessage.cs` with its validation, `QueueSendResult.cs`, `FailedOrderEntity.cs` and `FailedOrderDto.cs`.
-
-## Video
-
-https://youtu.be/aLWek_6F6QA
+ST10476901 did the menu, documents and orders. For the menu he wrote MenuItemEntity, MenuItemDto, MenuItemUpdateDto, MenuTableService and MenuController, with the role checks so only Admin and Staff can change items. For documents he wrote StaffDocumentInfo, UploadDocumentDto, BlobStorageService and DocumentsController. For orders he brought the order models and the table and queue services over from Part 2 and wrote OrdersController, including the status endpoint and the failed orders endpoint.
